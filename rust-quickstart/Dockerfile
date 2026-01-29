@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.75-slim-bookworm as builder
+FROM rust:latest as builder
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev
 
 # Create a blank project to cache dependencies
 RUN cargo init
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 # Generate a lock file if it doesn't exist
 RUN cargo generate-lockfile
 RUN cargo build --release

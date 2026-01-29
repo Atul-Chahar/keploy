@@ -56,15 +56,27 @@ Keploy can record API interactions and generate test cases automatically.
       -H "Content-Type: application/json" \
       -d '{"name": "Keploy Guide", "description": "A guide to using Keploy with Rust"}'
     ```
+    *Expected Output:*
+    ```json
+    {"id":"<some-uuid>","name":"Keploy Guide","description":"A guide to using Keploy with Rust"}
+    ```
 
     **Get Items:**
     ```bash
     curl http://localhost:8080/items
     ```
+    *Expected Output:*
+    ```json
+    [{"id":"<some-uuid>","name":"Keploy Guide","description":"A guide to using Keploy with Rust"}]
+    ```
 
     **Get a specific Item (replace UUID):**
     ```bash
-    curl http://localhost:8080/items/{uuid}
+    curl http://localhost:8080/items/<uuid-from-previous-step>
+    ```
+    *Expected Output:*
+    ```json
+    {"id":"<some-uuid>","name":"Keploy Guide","description":"A guide to using Keploy with Rust"}
     ```
 
 3.  **Stop Recording**:

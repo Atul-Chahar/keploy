@@ -79,11 +79,24 @@ async fn main() -> std::io::Result<()> {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await
-        .expect("Failed to create pool.");
+    let mut pool = None;
+    for _ in 0..10 {
+        match PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url)
+            .await {
+                Ok(p) => {
+                    pool = Some(p);
+                    break;
+                }
+                Err(_) => {
+                    println!("Waiting for database...");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                }
+            }
+    }
+    
+    let pool = pool.expect("Failed to connect to database");
 
     // Create table if not exists (simplification for quickstart)
     sqlx::query(
