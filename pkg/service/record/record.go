@@ -84,6 +84,11 @@ func (r *Recorder) Start(ctx context.Context, reRecordCfg models.ReRecordCfg) er
 	var testCount = 0
 	var mockCountMap = make(map[string]int)
 
+	// Auto-delay measurement: track when recording started and the computed delay
+	var recordStartTime time.Time
+	var measuredAutoDelay uint64
+	var firstTestReceived bool
+
 	// defering the stop function to stop keploy in case of any error in record or in case of context cancellation
 	defer func() {
 		select {
@@ -129,6 +134,15 @@ func (r *Recorder) Start(ctx context.Context, reRecordCfg models.ReRecordCfg) er
 			utils.LogError(r.logger, err, "failed to stop recording")
 		}
 		r.telemetry.RecordedTestSuite(newTestSetID, testCount, mockCountMap)
+
+		// Persist the measured auto-delay to the keploy config file
+		if measuredAutoDelay > 0 && r.config.ConfigPath != "" {
+			if updateErr := config.UpdateRecordedDelay(r.config.ConfigPath, measuredAutoDelay); updateErr != nil {
+				r.logger.Debug("Could not persist auto-delay to config file", zap.Error(updateErr))
+			} else {
+				r.logger.Info(fmt.Sprintf("Saved auto-delay of %ds to keploy config. This will be used during 'keploy test' if --delay is not explicitly set.", measuredAutoDelay))
+			}
+		}
 	}()
 
 	defer close(appErrChan)
@@ -174,6 +188,9 @@ func (r *Recorder) Start(ctx context.Context, reRecordCfg models.ReRecordCfg) er
 	for i, port := range passPortsUint {
 		passPortsUint32[i] = uint32(port)
 	}
+
+	// Record the start time for auto-delay measurement
+	recordStartTime = time.Now()
 
 	// Instrument will setup the environment and start the hooks and proxy
 	err := r.instrumentation.Setup(setupCtx, r.config.Command, models.SetupOptions{Container: r.config.ContainerName, DockerDelay: r.config.BuildDelay, Mode: models.MODE_RECORD, CommandType: r.config.CommandType, EnableTesting: false, GlobalPassthrough: r.config.Record.GlobalPassthrough, BuildDelay: r.config.BuildDelay, PassThroughPorts: passPortsUint, ConfigPath: r.config.ConfigPath})
@@ -248,6 +265,16 @@ func (r *Recorder) Start(ctx context.Context, reRecordCfg models.ReRecordCfg) er
 	r.mockDB.ResetCounterID() // Reset mock ID counter for each recording session
 	errGrp.Go(func() error {
 		for testCase := range frames.Incoming {
+			// Measure startup time on first test case arrival
+			if !firstTestReceived && !recordStartTime.IsZero() {
+				firstTestReceived = true
+				startupDuration := time.Since(recordStartTime)
+				bufferSeconds := uint64(10)
+				measuredAutoDelay = uint64(startupDuration.Seconds()) + bufferSeconds
+				r.logger.Info(fmt.Sprintf("Measured application startup time: %v. Auto-setting test delay to %ds (startup + %ds buffer).",
+					startupDuration.Round(time.Second), measuredAutoDelay, bufferSeconds))
+			}
+
 			testCase.Curl = pkg.MakeCurlCommand(testCase.HTTPReq)
 			if reRecordCfg.TestSet == "" {
 				err := r.testDB.InsertTestCase(ctx, testCase, newTestSetID, true)

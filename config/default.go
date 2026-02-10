@@ -65,6 +65,7 @@ record:
   recordTimer: 0s
   filters: []
   sync: false
+  recordedDelay: 0
 configPath: ""
 bypassRules: []
 disableMapping: true

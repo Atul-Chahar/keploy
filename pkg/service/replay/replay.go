@@ -695,6 +695,15 @@ func (r *Replayer) RunTestSet(ctx context.Context, testSetID string, testRunID s
 	testSetStatusByErrChan := models.TestSetStatusRunning
 
 	cmdType := utils.CmdType(r.config.CommandType)
+
+	// Resolve the effective delay: use recorded auto-delay if user hasn't explicitly set --delay
+	const defaultDelay = uint64(5)
+	effectiveDelay := r.config.Test.Delay
+	if effectiveDelay == defaultDelay && r.config.Record.RecordedDelay > 0 {
+		effectiveDelay = r.config.Record.RecordedDelay
+		r.logger.Info(fmt.Sprintf("Using auto-detected delay of %ds from recording session (override with --delay flag)", effectiveDelay))
+	}
+
 	// Check if mappings are present and decide filtering strategy
 	var expectedTestMockMappings map[string][]string
 	var useMappingBased bool
@@ -846,7 +855,7 @@ func (r *Replayer) RunTestSet(ctx context.Context, testSetID string, testRunID s
 
 		// Delay for user application to run
 		select {
-		case <-time.After(time.Duration(r.config.Test.Delay) * time.Second):
+		case <-time.After(time.Duration(effectiveDelay) * time.Second):
 		case <-runTestSetCtx.Done():
 			return models.TestSetStatusUserAbort, context.Canceled
 		}
@@ -976,7 +985,7 @@ func (r *Replayer) RunTestSet(ctx context.Context, testSetID string, testRunID s
 
 			// Delay for user application to run
 			select {
-			case <-time.After(time.Duration(r.config.Test.Delay) * time.Second):
+			case <-time.After(time.Duration(effectiveDelay) * time.Second):
 			case <-runTestSetCtx.Done():
 				return models.TestSetStatusUserAbort, context.Canceled
 			}
